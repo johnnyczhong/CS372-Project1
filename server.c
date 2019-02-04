@@ -14,6 +14,8 @@
 #define PORT "12000"
 #define BACKLOG 10
 #define BUF_SIZE 1024
+#define USERNAME "Server> "
+#define TERMINATE_MSG "\\quit"
 
 void sigchld_handler(int s)
 {
@@ -43,14 +45,16 @@ int main(void)
     int yes=1;
     char s[INET6_ADDRSTRLEN];
     char ch;
-    int rv, out_buffer_iter;
+    int rv, out_buffer_iter, client_username_length;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
 
     char* in_buffer = calloc(BUF_SIZE, sizeof(char));
-    char* out_buffer = calloc(BUF_SIZE, sizeof(char));
+    char* out_buffer = calloc(BUF_SIZE - strlen(USERNAME), sizeof(char));
+    char* out_msg = calloc(BUF_SIZE, sizeof(char));
+    char* search_ptr;
 
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -116,13 +120,25 @@ int main(void)
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
 
-            do 
+            if (recv(new_fd, in_buffer, BUF_SIZE, 0) == -1)
+                perror("recv");
+
+            client_username_length = strlen(in_buffer) + 1; // get username length for later parsing (+1 for whitespace)
+
+            do
             {
                 memset(in_buffer, 0, strlen(in_buffer));
                 if (recv(new_fd, in_buffer, BUF_SIZE, 0) == -1)
                     perror("recv");
 
                 printf("%s\n", in_buffer);
+
+                if ((search_ptr = strstr(in_buffer, TERMINATE_MSG)) != NULL)
+                {
+                    if (strcmp(search_ptr, TERMINATE_MSG) == 0)
+                        printf("server: client requested closing connection\n");
+                        break;
+                }
 
                 printf("server response: ");
                 out_buffer_iter = 0;
@@ -134,9 +150,10 @@ int main(void)
 
                 out_buffer[out_buffer_iter] = '\0';
 
+                sprintf(out_msg, "%s%s", USERNAME, out_buffer);
 
-            } while ((send(new_fd, out_buffer, out_buffer_iter, 0) == -1) 
-                    || (strcmp(out_buffer, "\\quit") != 0));
+            } while ((send(new_fd, out_msg, out_buffer_iter + strlen(USERNAME), 0) == -1) 
+                    || (strcmp(out_buffer, TERMINATE_MSG) != 0));
             
             printf("server: closing connection\n");
 
