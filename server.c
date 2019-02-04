@@ -123,21 +123,24 @@ int main(void)
             if (recv(new_fd, in_buffer, BUF_SIZE, 0) == -1)
                 perror("recv");
 
-            client_username_length = strlen(in_buffer) + 1; // get username length for later parsing (+1 for whitespace)
+            client_username_length = strlen(in_buffer) + 2; // get username length for later parsing (+2 for "> ")
 
             do
             {
+                // get handshake
                 memset(in_buffer, 0, strlen(in_buffer));
                 if (recv(new_fd, in_buffer, BUF_SIZE, 0) == -1)
                     perror("recv");
 
                 printf("%s\n", in_buffer);
 
-                if ((search_ptr = strstr(in_buffer, TERMINATE_MSG)) != NULL)
+                // checks if there are characters before \quit
+                if (((search_ptr = strstr(in_buffer, TERMINATE_MSG)) != NULL) 
+                   && (search_ptr == (in_buffer + client_username_length))
+                   && (strcmp(search_ptr, TERMINATE_MSG) == 0)) // checks if there are characters after \quit
                 {
-                    if (strcmp(search_ptr, TERMINATE_MSG) == 0)
-                        printf("server: client requested closing connection\n");
-                        break;
+                    printf("server: client requested closing connection\n");
+                    break;
                 }
 
                 printf("server response: ");
